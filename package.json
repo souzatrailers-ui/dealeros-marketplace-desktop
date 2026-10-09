@@ -1,0 +1,90 @@
+{
+  "name": "dealeros-marketplace-desktop",
+  "productName": "DealerOS Marketplace",
+  "version": "1.0.0",
+  "description": "DealerOS Windows app: posts the approved DealerOS queue to Facebook Marketplace from per-salesperson persistent browser profiles (login once in-app, no cookie import).",
+  "main": "main.js",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "mock-run": "node scripts/mock-run.js",
+    "test": "node --test test/",
+    "dist:win": "electron-builder --win nsis --x64 --publish never",
+    "release:win": "electron-builder --win nsis --x64 --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "playwright-core": "1.48"
+  },
+  "devDependencies": {
+    "electron": "^32.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "ai.dealeros.marketplace",
+    "productName": "DealerOS Marketplace",
+    "copyright": "\u00a9 2026 DealerOS AI",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**",
+      "renderer/**",
+      "mock/**",
+      "groups.json",
+      "build/icon.png",
+      "build/tray.png",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "DealerOS-Marketplace-Setup-${version}.${ext}",
+      "signtoolOptions": {
+        "publisherName": "DealerOS AI"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DealerOS Marketplace",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "souzatrailers-ui",
+        "repo": "dealeros-marketplace-desktop",
+        "private": false,
+        "releaseType": "release"
+      }
+    ]
+  },
+  "author": {
+    "name": "DealerOS AI",
+    "email": "support@dealerosai.ai"
+  },
+  "homepage": "https://app.dealerosai.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/souzatrailers-ui/dealeros-marketplace-desktop.git"
+  }
+}

@@ -1,0 +1,80 @@
+<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>DealerOS Marketplace</title><style>
+body{font:13px system-ui;margin:0;color:#0f172a}header{display:flex;gap:8px;align-items:center;padding:8px 12px;background:#0f172a;color:#fff}
+header button{background:#1e293b;color:#fff;border:0;padding:5px 10px;border-radius:4px;cursor:pointer}header button.on{background:#2563eb}
+main{padding:12px}.counters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;color:#475569;font-size:11px}
+.counters span{display:block;font-size:26px;font-weight:700;color:#0f172a}table{width:100%;border-collapse:collapse;margin-top:8px}
+th,td{border-bottom:1px solid #e2e8f0;padding:5px;text-align:left}th{font-size:11px;color:#64748b}.muted{color:#64748b}
+#log{height:120px;overflow:auto;background:#0f172a;color:#cbd5e1;font:11px monospace;padding:6px;margin-top:8px}
+label{display:block;margin:5px 0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.glist{max-height:380px;overflow:auto;border:1px solid #e2e8f0;padding:4px}
+</style></head><body>
+<header><b>DealerOS Marketplace</b><span id="who"></span>
+<button data-tab="queue" class="on">Queue</button><button data-tab="fbmp">FBMP Settings</button><button data-tab="groups">Groups</button><button data-tab="accounts">Account</button>
+<span style="margin-left:auto" id="mode"></span></header>
+<section id="login" hidden style="max-width:380px;margin:60px auto">
+  <h2>Sign in to DealerOS</h2>
+  <label>DealerOS URL <input id="l-url" value="https://app.dealerosai.ai" style="width:100%"></label>
+  <label>Email or username <input id="l-user" autocomplete="username" style="width:100%"></label>
+  <label>Password <input id="l-pass" type="password" autocomplete="current-password" style="width:100%"></label>
+  <label id="l-mfa-row" hidden>2FA code <input id="l-mfa" inputmode="numeric" style="width:100%"></label>
+  <label id="l-org-row" hidden>Dealership <select id="l-org" style="width:100%"></select></label>
+  <p><button id="l-go">Sign in</button> <span id="l-err" style="color:#b91c1c"></span></p>
+  <p class="muted">Use your normal DealerOS login. Your session is stored encrypted by Windows; your password is not saved.</p>
+</section>
+<section id="connect" hidden style="max-width:460px;margin:60px auto">
+  <h2>Connect Facebook</h2>
+  <p>Click below. A Chrome window opens at facebook.com/login. Sign in to <b>your own</b> Facebook there (including any 2-step code). This app keeps that login in your own private profile on this PC. Cookies are never imported, exported, or shared.</p>
+  <p><button id="c-go">Connect Facebook</button> <span id="c-msg" class="muted"></span></p>
+  <p><button id="c-logout">Sign out of DealerOS</button></p>
+</section>
+<main id="app" hidden>
+<section id="queue">
+  <div class="counters"><div><span id="c-queue">–</span>QUEUE</div><div><span id="c-processed">–</span>PROCESSED</div><div><span id="c-posted">–</span>POSTED</div><div><span id="c-sold">–</span>SOLD</div></div>
+  <p><button id="reload">Reload</button> <button id="run">Run next now</button> <label style="display:inline"><input type="checkbox" id="auto"> Auto-post at random times in business hours</label>
+  <button id="resume" hidden>Resume after checkpoint</button> <span id="plan" class="muted"></span></p>
+  <div id="await" hidden style="background:#fef3c7;padding:8px">Review the open browser window, publish or finish it yourself, then paste the listing URL: <input id="await-url" size="60"> <button id="await-done">Done</button> <button id="await-cancel">Cancel</button></div>
+  <table><thead><tr><th>VEHICLE</th><th>VEHICLE TYPE</th><th>PRICE</th><th>ACTION</th><th>STATUS</th><th>POST</th></tr></thead><tbody id="rows"></tbody></table>
+  <div id="log"></div>
+</section>
+<section id="fbmp" hidden><div class="grid">
+  <div><h4>Posting</h4>
+    <label><input type="checkbox" id="s-autoPost"> Auto-post (random times, business hours)</label>
+    <label><input type="checkbox" id="s-autoPublish"> Auto publish / auto renew clicks (default OFF)</label>
+    <label>Daily cap per account <input type="number" id="s-dailyCap" min="1" max="20"></label>
+    <label>Business hours <input type="number" id="s-startHour" min="0" max="23" style="width:50px"> to <input type="number" id="s-endHour" min="1" max="24" style="width:50px"></label>
+    <label>Min minutes between posts <input type="number" id="s-minGapMin" min="1"></label>
+    <label>Rep name in listing <input id="s-repName"></label><label>Rep phone in listing <input id="s-repPhone"></label>
+    <label>Same unit across reps: not within <input type="number" id="s-staggerHours" style="width:50px"> hours</label>
+    <label>Check for sold units every <input type="number" id="s-delistPollMin" style="width:50px"> min</label>
+    <label>Form <select id="s-form"><option value="vehicle">Vehicle (Trailer)</option><option value="item">Item for sale</option></select></label>
+  </div>
+  <div><h4>Renew method</h4>
+    <label><input type="radio" name="renew" value="AUTO_RENEW_WEEKLY_4_THEN_REPOST"> Auto renew weekly for <input type="number" id="s-maxRenewals" style="width:45px"> weeks, then repost</label>
+    <label><input type="radio" name="renew" value="RENEW_EVERY_N_DAYS_THEN_REPOST"> Renew every <input type="number" id="s-renewEveryDays" style="width:45px"> days, then repost</label>
+    <label><input type="radio" name="renew" value="REPOST_EVERY_N_DAYS"> Repost every <input type="number" id="s-repostEveryDays" style="width:45px"> days</label>
+    <label><input type="radio" name="renew" value="NONE"> Don't renew</label></div>
+  <div><h4>Vehicles</h4>
+    <label><input type="checkbox" id="s-postWithoutPrice"> Post vehicles without a price</label>
+    <label><input type="checkbox" id="s-repostWithoutPrice"> Repost vehicles without a price</label>
+    <label><input type="checkbox" id="s-specialPricing"> Post with special pricing</label>
+    <label><input type="checkbox" id="s-removeSold"> Remove vehicles marked sold</label>
+    <label>Unknown make/model <select id="s-unknownMake"><option value="OTHER">Post under Other</option><option value="HOLD">Hold until mapped</option></select></label>
+    <label><input type="checkbox" id="s-generateDescriptionIfMissing"> Auto-generate description only if none</label>
+    <label><input type="checkbox" id="s-hideVehicleDetails"> Hide vehicle details in description</label></div>
+</div><button class="save">Save</button> <span class="muted">Live mode: DealerOS account settings from your manager take priority.</span></section>
+<section id="groups" hidden>
+  <label><input type="checkbox" id="s-postToGroups"> Post to Facebook groups</label>
+  <label>Max groups per listing <input type="number" id="s-maxGroupsPerListing"> · per day <input type="number" id="s-maxGroupSharesPerDay"></label>
+  <p class="muted">★ suggested · ✔ posting confirmed. Groups that need admin approval or are closed are skipped automatically.</p>
+  <input id="g-filter" placeholder="filter"> <label style="display:inline"><input type="checkbox" id="g-sugg" checked> suggested only</label>
+  <div id="g-list" class="glist"></div><button class="save">Save</button>
+</section>
+<section id="accounts" hidden>
+  <p>DealerOS: <b id="acc-user"></b> · <span id="acc-org"></span></p>
+  <p>Facebook: <b id="acc-fb"></b> <button id="acc-reconnect">Reconnect Facebook</button></p>
+  <label>Read buyer messages every <input type="number" id="s-leadPollMin" min="5" max="120" style="width:50px"> min (read-only, never replies)</label>
+  <p><button class="save">Save</button> <button id="acc-poll">Sync leads now</button></p>
+  <p><label style="display:inline"><input type="checkbox" id="app-autostart"> Start with Windows (runs in the tray)</label> · <button id="app-logs">Open logs folder</button> · <span id="app-info" class="muted"></span></p>
+  <p><button id="acc-logout">Sign out</button> <label style="display:inline"><input type="checkbox" id="acc-wipe"> Also disconnect Facebook (wipe this PC's Facebook profile)</label></p>
+</section>
+</main><script src="renderer.js"></script></body></html>

@@ -1,0 +1,15 @@
+<!doctype html><html><body><h3>LOCAL MOCK of a Marketplace create form (not Facebook)</h3>
+<input type="file" accept="image/*" multiple id="photos">
+<div role="combobox" aria-label="Vehicle type" tabindex="0" onclick="show('vt')"><span>Vehicle type</span> <b id="vt-val"></b></div>
+<div id="vt" role="listbox" hidden><div role="option" onclick="pick('vt','Car/Truck')">Car/Truck</div><div role="option" onclick="pick('vt','Trailer')">Trailer</div></div>
+<div role="combobox" aria-label="Year" tabindex="0" onclick="show('yr')"><span>Year</span> <b id="yr-val"></b></div>
+<div id="yr" role="listbox" hidden><div role="option" onclick="pick('yr','2025')">2025</div><div role="option" onclick="pick('yr','2026')">2026</div></div>
+<label><span>Make</span><input aria-label="Make"></label>
+<label><span>Model</span><input aria-label="Model"></label>
+<label><span>Price</span><input aria-label="Price"></label>
+<label><span>Description</span><textarea aria-label="Description"></textarea></label>
+<div role="button" onclick="document.getElementById('step2').hidden=false">Next</div>
+<div id="step2" hidden><div role="checkbox" aria-label="Trailers only sale or trade" aria-checked="false" onclick="this.setAttribute('aria-checked','true')">Trailers only sale or trade</div>
+<button onclick="location.hash='/marketplace/item/1234567890/'">Publish</button></div>
+<script>function show(id){document.getElementById(id).hidden=false}function pick(id,v){document.getElementById(id+'-val').textContent=v;document.getElementById(id).hidden=true}</script>
+</body></html>
