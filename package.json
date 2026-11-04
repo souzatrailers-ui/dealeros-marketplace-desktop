@@ -1,17 +1,18 @@
 {
   "name": "dealeros-marketplace-desktop",
   "productName": "DealerOS Marketplace",
-  "version": "1.0.0",
-  "description": "DealerOS Windows app: posts the approved DealerOS queue to Facebook Marketplace from per-salesperson persistent browser profiles (login once in-app, no cookie import).",
+  "version": "1.0.18",
+  "description": "DealerOS Marketplace: posts each dealer's inventory to Facebook Marketplace from every rep's own logged-in profile.",
   "main": "main.js",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
     "start": "electron .",
     "mock-run": "node scripts/mock-run.js",
-    "test": "node --test test/",
-    "dist:win": "electron-builder --win nsis --x64 --publish never",
-    "release:win": "electron-builder --win nsis --x64 --publish always"
+    "test": "node --test ./test/*.js",
+    "dist:win": "electron-builder --win nsis --x64 --publish never --config electron-builder.config.js",
+    "release:win": "electron-builder --win nsis --x64 --publish always --config electron-builder.config.js",
+    "dist:mac": "electron-builder --mac dmg --arm64 --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
@@ -19,12 +20,14 @@
   },
   "devDependencies": {
     "electron": "^32.2.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "pe-library": "^1.0.1",
+    "resedit": "^2.0.3"
   },
   "build": {
     "appId": "ai.dealeros.marketplace",
     "productName": "DealerOS Marketplace",
-    "copyright": "\u00a9 2026 DealerOS AI",
+    "copyright": "© 2026 DealerOS AI",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -35,9 +38,7 @@
       "src/**",
       "renderer/**",
       "mock/**",
-      "groups.json",
-      "build/icon.png",
-      "build/tray.png",
+      "build/*.png",
       "package.json"
     ],
     "asar": true,
@@ -52,9 +53,8 @@
       ],
       "icon": "build/icon.ico",
       "artifactName": "DealerOS-Marketplace-Setup-${version}.${ext}",
-      "signtoolOptions": {
-        "publisherName": "DealerOS AI"
-      }
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
@@ -76,7 +76,21 @@
         "private": false,
         "releaseType": "release"
       }
-    ]
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.business",
+      "identity": null,
+      "artifactName": "DealerOS-Marketplace-${version}-mac-${arch}.${ext}"
+    }
   },
   "author": {
     "name": "DealerOS AI",

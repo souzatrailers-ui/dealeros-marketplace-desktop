@@ -23,10 +23,20 @@ function setupCrashSafety(app, getWin) {
   app.on("child-process-gone", (_e, d) => console.error("child process gone", d));
 }
 
-function findChrome() {
-  if (process.platform !== "win32") return null;
-  const bases = [process.env["PROGRAMFILES"], process.env["PROGRAMFILES(X86)"], process.env["LOCALAPPDATA"]].filter(Boolean);
-  for (const b of bases) { const p = path.join(b, "Google", "Chrome", "Application", "chrome.exe"); if (fs.existsSync(p)) return p; }
+// Start at login. Windows: Run key with --hidden. macOS: Login Items (openAsHidden).
+function loginItem(on, platform = process.platform) {
+  return platform === "darwin" ? { openAtLogin: on, openAsHidden: true } : { openAtLogin: on, args: ["--hidden"] };
+}
+
+const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+function findChrome(platform = process.platform, exists = fs.existsSync, env = process.env) {
+  if (platform === "darwin") {
+    for (const p of [MAC_CHROME, path.join(env.HOME || "", "Applications/Google Chrome.app/Contents/MacOS/Google Chrome")]) if (exists(p)) return p;
+    return null;
+  }
+  if (platform !== "win32") return null;
+  const bases = [env["PROGRAMFILES"], env["PROGRAMFILES(X86)"], env["LOCALAPPDATA"]].filter(Boolean);
+  for (const b of bases) { const p = path.join(b, "Google", "Chrome", "Application", "chrome.exe"); if (exists(p)) return p; }
   return null;
 }
 
@@ -37,8 +47,8 @@ function setupTray(app, { Tray, Menu, nativeImage }, iconPath, getWin, actions) 
     { label: "Open DealerOS Marketplace", click: () => { const w = getWin(); w.show(); w.focus(); } },
     { label: "Sync leads now", click: actions.pollLeads },
     { type: "separator" },
-    { label: "Start with Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin,
-      click: i => app.setLoginItemSettings({ openAtLogin: i.checked, args: ["--hidden"] }) },
+    { label: process.platform === "darwin" ? "Open at Login" : "Start with Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin,
+      click: i => app.setLoginItemSettings(loginItem(i.checked)) },
     { label: "Open logs folder", click: actions.openLogs },
     { type: "separator" },
     { label: "Quit", click: () => { app.isQuitting = true; app.quit(); } }
@@ -48,4 +58,4 @@ function setupTray(app, { Tray, Menu, nativeImage }, iconPath, getWin, actions) 
   tray.on("right-click", () => tray.setContextMenu(menu()));
   return tray;
 }
-module.exports = { setupLogging, setupCrashSafety, findChrome, setupTray };
+module.exports = { setupLogging, setupCrashSafety, findChrome, setupTray, loginItem, MAC_CHROME };

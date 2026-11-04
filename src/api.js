@@ -4,10 +4,26 @@ const path = require("path");
 const { cleanDescription, renewalDue, RULES } = require("./rules");
 const { applyVariant } = require("./variants");
 
+const SIGN_IN = "Your DealerOS sign-in expired. Sign in again to load the queue.";
+
+/** Keep the access and refresh tokens when a /auth/me profile is merged on top.
+ *  Call this with the session object from AFTER the request returns. Spreading the
+ *  session in the same expression as `await api.me()` copies the pre-refresh tokens. */
+function sessionWithProfile(tokenSession, profile) {
+  const base = tokenSession && typeof tokenSession === "object" ? tokenSession : {};
+  const merged = { ...base, ...(profile || {}) };
+  for (const k of ["access_token", "refresh_token", "expires_in", "token_type", "scope"]) {
+    if (base[k] != null && base[k] !== "") merged[k] = base[k];
+  }
+  return merged;
+}
+
 class DealerOSApi {
   /** session: {access_token, refresh_token}; onTokens(newPair) persists rotated tokens (encrypted). */
-  constructor({ apiBase, session, onTokens = () => {} }) {
+  constructor({ apiBase, session, onTokens = () => {}, clientInfo = null }) {
+    this.clientInfo = clientInfo;   // () => ({app_version, platform, profile}) sent with every result (1.0.19+)
     this.base = apiBase.replace(/\/$/, "") + "/api/public/marketplace-ext"; this.session = session || {}; this.onTokens = onTokens;
+    this._refreshing = null;
   }
   static async login(apiBase, { username, password, mfa_code, organization_id, device_name }) {
     const r = await fetch(apiBase.replace(/\/$/, "") + "/api/public/marketplace-ext/auth/login", { method: "POST",
@@ -16,11 +32,30 @@ class DealerOSApi {
     if (!r.ok) { const e = new Error(b.detail || "HTTP " + r.status); e.status = r.status; throw e; }
     return b;
   }
-  async refresh() {
-    const r = await fetch(this.base + "/auth/refresh", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: this.session.refresh_token }) });
-    if (!r.ok) throw Object.assign(new Error("Session expired - sign in again"), { status: 401, signOut: true });
-    const pair = await r.json(); this.session = { ...this.session, ...pair }; this.onTokens(this.session); return pair;
+  refresh() {
+    if (this._refreshing) return this._refreshing;
+    this._refreshing = this._refreshOnce().finally(() => { this._refreshing = null; });
+    return this._refreshing;
+  }
+  async _refreshOnce() {
+    const refreshToken = this.session && this.session.refresh_token;
+    if (!refreshToken) throw Object.assign(new Error(SIGN_IN), { status: 401, signOut: true });
+    let r;
+    try {
+      r = await fetch(this.base + "/auth/refresh", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }) });
+    } catch (e) {
+      // A dropped connection is not a signed-out account. Leave the saved tokens alone.
+      throw Object.assign(new Error("Couldn't reach DealerOS to renew the sign-in. Check the connection and try again."), { status: 0 });
+    }
+    const pair = await r.json().catch(() => ({}));
+    if (!r.ok || !pair.access_token || !pair.refresh_token) throw Object.assign(new Error(SIGN_IN), { status: r.status || 401, signOut: true });
+    // The new pair is the token source. The saved session only fills in the
+    // name, dealership, and Facebook fields. Passing them the other way
+    // around puts the revoked tokens back.
+    this.session = sessionWithProfile(pair, this.session);
+    this.onTokens(this.session);
+    return pair;
   }
   async req(p, opts = {}, retry = true) {
     const r = await fetch(this.base + p, { ...opts, headers: { Authorization: "Bearer " + this.session.access_token, "Content-Type": "application/json" } });
@@ -34,12 +69,21 @@ class DealerOSApi {
   fbConnect(info) { return this.req("/facebook/connect", { method: "POST", body: JSON.stringify(info) }); }
   fbDisconnect() { return this.req("/facebook/disconnect", { method: "POST" }); }
   postLeads(threads) { return this.req("/leads", { method: "POST", body: JSON.stringify({ threads }) }); }
+  importGroups(groups) { return this.req("/groups/import", { method: "POST", body: JSON.stringify({ groups }) }); }
   state() { return this.req("/jobs"); }
+  // Phase 2 assisted channels (Craigslist, OfferUp): the rep clicks Publish; only the listing URL is reported back.
+  channelConnected(channel, display_name) { return this.req(`/channels/${channel}/connected`, { method: "POST", body: JSON.stringify({ display_name }) }); }
+  channelDisconnected(channel) { return this.req(`/channels/${channel}/disconnected`, { method: "POST" }); }
+  assistTasks() { return this.req("/assist-tasks"); }
+  assistReport(id, status, listing_url = "") { return this.req(`/assist-tasks/${id}/${status}`, { method: "POST", body: JSON.stringify({ listing_url }) }); }
   claim(o = {}) { return this.req("/jobs/claim", { method: "POST", body: JSON.stringify({ delist_only: !!o.delistOnly }) }); }
+  meta() {
+    try { const i = typeof this.clientInfo === "function" ? this.clientInfo() : this.clientInfo; return i && typeof i === "object" ? i : {}; } catch { return {}; }
+  }
   report(id, result) {
-    const map = { DELISTED: "delisted", RENEWED: "renewed", REPOSTED: "reposted" };
-    if (map[result.outcome]) return this.req(`/jobs/${id}/${map[result.outcome]}`, { method: "POST" });
-    return this.req(`/jobs/${id}/result`, { method: "POST", body: JSON.stringify(result) });
+    const map = { DELISTED: "delisted", RENEWED: "renewed", REPOSTED: "reposted" }, meta = this.meta();
+    if (map[result.outcome]) return this.req(`/jobs/${id}/${map[result.outcome]}`, { method: "POST", body: JSON.stringify(meta) });
+    return this.req(`/jobs/${id}/result`, { method: "POST", body: JSON.stringify({ ...meta, ...result }) });
   }
 }
 
@@ -61,14 +105,14 @@ class MockApi {
         else if (["QUEUED", "APPROVED", "FAILED"].includes(j.status)) j.status = "REMOVED";
       }
     } else {
-      const footer = RULES.join("\n");
+      const prof = s.profile || {}, footer = (prof.compliance_footer && prof.compliance_footer.length ? prof.compliance_footer : RULES).join("\n");
       jobs = units.filter(u => u.status === "AVAILABLE" && (u.cash_price > 0 || s.postWithoutPrice) && u.photo_url).map(u => ({
         id: "mock-" + u.id, inventory_id: u.id, status: s.autoPost ? "APPROVED" : "QUEUED",
         payload: {
           title: [u.year, u.manufacturer, u.model, u.category].filter(Boolean).join(" ").slice(0, 99),
           price: Math.round(u.cash_price || 0), vin: u.vin, year: u.year, make: u.manufacturer, model: u.model,
           vehicle_type: "Trailer", category: "Trailers", category_label: u.category, condition_raw: u.condition, condition: u.condition === "NEW" ? "New" : "Used - Good",
-          description: cleanDescription(u.description), unknown_make: s.unknownMake,
+          description: cleanDescription(u.description, s.profile), unknown_make: s.unknownMake,
           groups: s.postToGroups ? s.groups.slice(0, s.maxGroupsPerListing) : [],
           photos: [u.photo_url, ...(u.photos || []).map(p => p.url || p)].filter(Boolean).map(abs).filter((v, i, a) => a.indexOf(v) === i).slice(0, 20)
         }
@@ -106,4 +150,4 @@ class MockApi {
     this.save(jobs); return j;
   }
 }
-module.exports = { DealerOSApi, MockApi };
+module.exports = { DealerOSApi, MockApi, sessionWithProfile, SIGN_IN };

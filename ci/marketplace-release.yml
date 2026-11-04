@@ -1,0 +1,83 @@
+# INSTALL: copy this file to .github/workflows/marketplace-release.yml at the DealerOS-AI root (needs a push with the GitHub "workflow" permission).
+name: DealerOS Marketplace app release
+# Push a tag like marketplace-v1.0.14 (matching desktop_apps/dealeros-marketplace-desktop/package.json "version").
+# Builds the Windows (NSIS x64) and Mac (DMG arm64) installers and publishes them as release v1.0.14 on the
+# public releases repo souzatrailers-ui/dealeros-marketplace-desktop. DealerOS (Marketplace > Get the app) and the
+# installed apps' auto-updater both read that repo's latest release, so nothing else needs to change.
+on:
+  push:
+    tags: ['marketplace-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build, e.g. marketplace-v1.0.14'
+        required: true
+permissions:
+  contents: read
+env:
+  APP_DIR: desktop_apps/dealeros-marketplace-desktop
+  RELEASES_REPO: souzatrailers-ui/dealeros-marketplace-desktop
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: macos-14
+            target: mac
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+      - name: Tag matches package.json version
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          V=$(node -p "require('./package.json').version")
+          test "marketplace-v$V" = "$TAG" || { echo "Tag $TAG does not match package.json version $V"; exit 1; }
+      - run: npm ci
+      - run: npm test
+      - name: Build installer (unsigned)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            ${{ env.APP_DIR }}/dist/*.exe
+            ${{ env.APP_DIR }}/dist/*.exe.blockmap
+            ${{ env.APP_DIR }}/dist/*.dmg
+            ${{ env.APP_DIR }}/dist/*.dmg.blockmap
+            ${{ env.APP_DIR }}/dist/latest*.yml
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish GitHub release on the public releases repo
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_RELEASE_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "Add the MARKETPLACE_RELEASE_TOKEN repository secret (see desktop_apps/dealeros-marketplace-desktop/RELEASING.md)"; exit 1; }
+          TAG="${{ inputs.tag || github.ref_name }}"
+          bash scripts/publish_marketplace_release.sh "${TAG#marketplace-v}" out

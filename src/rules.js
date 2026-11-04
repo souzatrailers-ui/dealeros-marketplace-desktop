@@ -1,10 +1,26 @@
-// Shared listing rules + throttling math (pure functions, unit-tested).
-const RULES = ["Pickup only - no delivery.", "Financing options available; subject to approval. No financing is guaranteed."];
-const BANNED = ["guaranteed approval", "guaranteed financing", "approved financing", "everyone approved", "we deliver", "free delivery", "delivery available"];
-
-function cleanDescription(t) {
-  const lines = String(t || "").split("\n").filter(l => !BANNED.some(b => l.toLowerCase().includes(b)));
-  return (lines.join("\n").trim() + "\n\n" + RULES.join("\n")).trim();
+// Shared listing rules + throttling math (pure functions, unit-tested). Works in Node and in the extension (self.DealerOSRules).
+// Dealer-specific values (compliance footer, banned phrases, financing-paths line) come from the dealer's
+// DealerOS Marketplace profile (server); these are only the generic defaults used when no profile is loaded.
+(function (root) {
+const RULES = ["Financing, if offered, is subject to approval. No financing is guaranteed."];
+const BANNED = ["guaranteed approval", "guaranteed financing", "approved financing", "everyone approved"];
+// Compliance rule (all dealers): only text that ASKS for a number is removed; "Finance with Business EIN" offers stay.
+const ID_WORDS = "(ssn|itin|ein|social\\s*security(\\s*number)?|tax\\s*id(\\s*number)?|id|driver'?s?\\s*licen[cs]e)";
+const ASK_WORDS = "(send|provide|share|dm|pm|message|text|e-?mail|give|bring|enter|submit|upload|include|need(ed)?|requir\\w*|must\\s+have)";
+const SENSITIVE_ID = new RegExp("\\b" + ASK_WORDS + "\\b[^.\\n]{0,40}?\\b" + ID_WORDS + "\\b|\\b" + ID_WORDS + "\\b[^.\\n]{0,20}?\\b(required|needed|must\\s+be\\s+provided)\\b", "i");
+const FIN_PATHS = /financ\w*\s*(paths?|options?|programs?|available)|clicklease|rent[\s-]*to[\s-]*own|bank\s*loan/i;
+/** profile = {compliance_footer:[..], banned_phrases:[..], financing_paths_line:""} from DealerOS (optional). */
+function cleanDescription(t, profile) {
+  const footer = (profile && profile.compliance_footer && profile.compliance_footer.length) ? profile.compliance_footer : RULES;
+  const banned = (profile && profile.banned_phrases) || BANNED;
+  const finLine = (profile && profile.financing_paths_line) || "";
+  const out = []; let fin = false;
+  for (const l of String(t || "").split("\n")) {
+    if (banned.some(b => l.toLowerCase().includes(String(b).toLowerCase())) || SENSITIVE_ID.test(l) || footer.includes(l.trim())) continue;
+    if (finLine && FIN_PATHS.test(l)) { if (!fin) { out.push(finLine); fin = true; } continue; }
+    out.push(l);
+  }
+  return (out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n\n" + footer.join("\n")).trim();
 }
 
 // Pick N random times today inside [startHour,endHour), at least minGapMin apart, after `from`.
@@ -31,4 +47,6 @@ function renewalDue(job, s, now = Date.now()) {
   return (job.renew_count || 0) >= s.maxRenewals ? "REPOST" : "RENEW";
 }
 
-module.exports = { RULES, BANNED, cleanDescription, randomSlots, renewalDue };
+const api = { RULES, BANNED, SENSITIVE_ID, cleanDescription, randomSlots, renewalDue };
+if (typeof module !== "undefined" && module.exports) module.exports = api; else root.DealerOSRules = api;
+})(typeof self !== "undefined" ? self : this);

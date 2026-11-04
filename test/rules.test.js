@@ -1,7 +1,8 @@
 const test = require("node:test"), assert = require("node:assert");
 const { cleanDescription, randomSlots, renewalDue } = require("../src/rules");
 test("description rules", () => {
-  const d = cleanDescription("Nice\nGuaranteed financing!\nWe deliver");
+  // compliance footer + banned phrases are dealer-specific and come from the DealerOS profile
+  const d = cleanDescription("Nice\nGuaranteed financing!\nWe deliver", { compliance_footer: ["Pickup only"], banned_phrases: ["guaranteed financing", "we deliver"] });
   assert.ok(!/guaranteed financing|we deliver/i.test(d) && d.includes("Pickup only"));
 });
 test("random slots inside business hours and apart", () => {
@@ -23,7 +24,7 @@ test("renew methods", () => {
 });
 
 const { applyVariant } = require("../src/variants");
-const FOOTER = "Pickup only - no delivery.\nFinancing options available; subject to approval. No financing is guaranteed.";
+const FOOTER = "Delivery available by quote (about $4-$5 per mile, $350 minimum). Trailer must be paid in full before it leaves the yard.\nFinancing options available; subject to approval. No financing is guaranteed.";
 const base = { year: 2026, make: "Lark", model: "7X16TA", category_label: "Enclosed", price: 8999, vin: "V1",
   description: "Great trailer. Available now.\n\nSPECS\n• Size: 7' x 16'\n• GVWR: 7,000 lbs\n\nDOORS\n• Ramp\n\n" + FOOTER,
   photos: ["p0", "p1", "p2", "p3", "p4", "p5", "p6"] };

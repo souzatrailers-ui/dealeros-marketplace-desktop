@@ -1,0 +1,25 @@
+<!doctype html><html><body><h3>LOCAL MOCK of the Marketplace VEHICLE form with FB-style validation (not Facebook)</h3>
+<!-- Next stays aria-disabled until every required field has a value (reproduces the Sep 24 manual attempt). -->
+<input type="file" accept="image/*" multiple id="photos" onchange="v()">
+<div role="combobox" aria-label="Vehicle type" tabindex="0" onclick="show('vt')"><span>Vehicle type</span> <b id="vt-val"></b></div>
+<div id="vt" role="listbox" hidden><div role="option" onclick="pick('vt','Car/Truck')">Car/Truck</div><div role="option" onclick="pick('vt','Trailer')">Trailer</div></div>
+<label><span>Location</span><input aria-label="Location" oninput="v()"></label>
+<label><span>Year</span><input aria-label="Year" oninput="v()"></label>
+<label><span>Make</span><input aria-label="Make" oninput="v()"></label>
+<label><span>Model</span><input aria-label="Model" oninput="v()"></label>
+<div role="combobox" aria-label="Exterior color" tabindex="0" onclick="show('ec')"><span>Exterior color</span> <b id="ec-val"></b></div>
+<div id="ec" role="listbox" hidden><div role="option" onclick="pick('ec','Black')">Black</div><div role="option" onclick="pick('ec','Gray')">Gray</div><div role="option" onclick="pick('ec','Silver')">Silver</div><div role="option" onclick="pick('ec','White')">White</div><div role="option" onclick="pick('ec','Red')">Red</div></div>
+<div role="combobox" aria-label="Interior color" tabindex="0" onclick="show('ic')"><span>Interior color</span> <b id="ic-val"></b></div>
+<div id="ic" role="listbox" hidden><div role="option" onclick="pick('ic','Black')">Black</div><div role="option" onclick="pick('ic','Gray')">Gray</div><div role="option" onclick="pick('ic','Silver')">Silver</div><div role="option" onclick="pick('ic','White')">White</div><div role="option" onclick="pick('ic','Red')">Red</div></div>
+<label><span>Mileage</span><input aria-label="Mileage" oninput="v()"></label>
+<div role="combobox" aria-label="Transmission" tabindex="0" id="trbox"><span>Transmission</span> <b id="tr-val"></b></div>
+<label><span>Price</span><input aria-label="Price" oninput="v()"></label>
+<label><span>Description</span><textarea aria-label="Description" oninput="v()"></textarea></label>
+<div role="button" id="next" aria-disabled="true" onclick="if(this.getAttribute('aria-disabled')!=='true')document.getElementById('step2').hidden=false">Next</div>
+<div id="step2" hidden><button onclick="location.hash='/marketplace/item/42/'">Publish</button></div>
+<script>
+function show(id){document.getElementById(id).hidden=false}
+function pick(id,val){document.getElementById(id+'-val').textContent=val;if(id==='vt')document.getElementById('trbox').hidden=(val==='Trailer');document.getElementById(id).hidden=true;v()}
+function v(){const ok=document.getElementById('photos').files.length&&document.getElementById('vt-val').textContent&&document.getElementById('ec-val').textContent&&document.getElementById('ic-val').textContent&&[...document.querySelectorAll('input[aria-label],textarea')].every(e=>e.value.trim());
+  document.getElementById('next').setAttribute('aria-disabled',ok?'false':'true')}
+</script></body></html>
