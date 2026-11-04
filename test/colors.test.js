@@ -1,0 +1,13 @@
+const test = require("node:test"), assert = require("node:assert");
+const { exteriorColor: X } = require("../src/colors");
+const c = p => (X(p) || {}).color || null;
+test("color field wins", () => assert.equal(c({ color: "Charcoal Metallic", description: "white trailer" }), "Gray"));
+test("pewter -> Silver", () => assert.equal(c({ description: "Exterior color: Pewter. Black interior." }), "Silver"));
+test("charcoal in text", () => assert.equal(c({ description: "7x16 enclosed, charcoal exterior, ramp door" }), "Gray"));
+test("skip part colors", () => assert.equal(c({ description: "Black rims, white LED lights, red exterior" }), "Red"));
+test("skip parts then body", () => assert.equal(c({ description: "Black rims and LED lights. Silver aluminum skin." }), "Silver"));
+test("nothing -> null", () => assert.equal(X({ description: "Great 7x14 dump trailer" }), null));
+test("server default Black not over description", () => assert.equal(c({ exterior_color: "Black", description: "Blue 6x12 cargo" }), "Blue"));
+test("server non-default kept", () => assert.equal(c({ exterior_color: "White", description: "Blue stripes" }), "White"));
+test("server Black alone", () => assert.equal(c({ exterior_color: "Black" }), "Black"));
+test("grey spelling", () => assert.equal(c({ description: "Color - dark grey" }), "Gray"));

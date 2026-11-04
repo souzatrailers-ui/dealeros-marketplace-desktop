@@ -1,6 +1,6 @@
 // Deterministic per-(unit, rep account) listing variation (JS port of app/marketplace_variants.py,
 // used in mock mode; in live mode DealerOS sends already-varied payloads).
-// Never changes year/make/model, VIN, price, spec lines, or the Souza rules footer; photos only reordered.
+// Never changes year/make/model, VIN, price, spec lines, or the dealer compliance footer; photos only reordered.
 (function (root) {
   const TITLES = ["{year} {make} {model} {category}", "{year} {make} {model} {category} Trailer", "{category} Trailer {year} {make} {model}",
     "{year} {make} {model} - {category}", "New {year} {make} {model} {category}"];
