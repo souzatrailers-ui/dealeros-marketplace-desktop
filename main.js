@@ -61,7 +61,8 @@ class Rep {
   async build() {
     await this.stop(); const cfg = this.cfg, log = m => this.log(m);
     this.api = cfg.mock ? new MockApi({ dataDir: store.dir(this.id), settings: cfg, accountId: "mock", rep: { name: cfg.repName, phone: cfg.repPhone } })
-      : new DealerOSApi({ apiBase: cfg.apiBase, session: this.session, onTokens: s => { this.session = sessionWithProfile(s, this.session); this.saveSession(this.session); } });
+      : new DealerOSApi({ apiBase: cfg.apiBase, session: this.session,
+        clientInfo: () => ({ app_version: app.getVersion(), platform: process.platform, profile: this.name }), onTokens: s => { this.session = sessionWithProfile(s, this.session); this.saveSession(this.session); } });
     this.poster = new Poster({ profilesDir: store.chromeDir(this.id), accountId: this.key(), fbBase: cfg.fbBase, log, imageDHash, assetBase: cfg.mock ? cfg.mockAssetBase : cfg.apiBase,
       executablePath: findChrome() || undefined });
     if (!(cfg.mock || (this.session?.facebook_accounts || []).length > 0)) return;

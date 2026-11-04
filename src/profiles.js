@@ -56,16 +56,39 @@ class ProfileStore {
 class PostingGate {
   constructor({ switchGapMs = 6 * 60000, now = () => Date.now(), waitTtlMs = 3 * 60000 } = {}) {
     Object.assign(this, { switchGapMs, now, waitTtlMs }); this.holder = null; this.lastId = null; this.lastEnd = 0; this.waiting = new Map();
+    this.background = false; this.activity = null;
   }
+  /** Is the browser reserved for someone other than `id`? (a rep waiting for a turn, or the switch gap after another rep) */
+  reservedFor(id) {
+    if (this.othersWaiting(id)) return true;
+    return !!(this.lastId && this.lastId !== id && this.now() - this.lastEnd < this.switchGapMs);
+  }
+  /** 1.0.19: background work (sold take-down checks). Runs only when the browser is idle and not reserved,
+   *  never registers as waiting, and on release does NOT restart the rep-switch wait, so it cannot steal
+   *  or delay a posting turn. */
+  tryAcquireBackground(id) {
+    if (this.holder || this.reservedFor(id)) return false;
+    this.holder = id; this.background = true; this.activity = null; return true;
+  }
+  /** What the holder is doing, for the UI: {kind: "post"|"take-down"|"renew"|"repost"|"leads", jobId, title}. */
+  setActivity(id, activity) { if (this.holder === id) this.activity = activity || null; }
   othersWaiting(id) { const t = this.now(); for (const [k, since] of this.waiting) { if (t - since > this.waitTtlMs) this.waiting.delete(k); else if (k !== id) return true; } return false; }
   tryAcquire(id) {
     if (this.holder) { this.waiting.set(id, this.now()); return false; }
     if (this.lastId && this.lastId !== id && this.now() - this.lastEnd < this.switchGapMs) { this.waiting.set(id, this.now()); return false; }
     if (this.lastId === id && this.othersWaiting(id)) return false;          // let the next rep have a turn
-    this.waiting.delete(id); this.holder = id; return true;
+    this.waiting.delete(id); this.holder = id; this.background = false; this.activity = null; return true;
   }
-  release(id) { if (this.holder !== id) return; this.holder = null; this.lastId = id; this.lastEnd = this.now(); }
+  release(id) {
+    if (this.holder !== id) return;
+    const bg = this.background;
+    this.holder = null; this.background = false; this.activity = null;
+    if (!bg) { this.lastId = id; this.lastEnd = this.now(); }   // background runs keep the posting rotation as it was
+  }
   forget(id) { this.waiting.delete(id); if (this.holder === id) this.release(id); }
-  status() { return { holder: this.holder, lastId: this.lastId, nextSwitchAt: this.lastId ? this.lastEnd + this.switchGapMs : 0 }; }
+  status() {
+    return { holder: this.holder, background: this.holder ? this.background : false, activity: this.holder ? this.activity : null,
+      waiting: [...this.waiting.keys()], lastId: this.lastId, nextSwitchAt: this.lastId ? this.lastEnd + this.switchGapMs : 0 };
+  }
 }
 module.exports = { ProfileStore, PostingGate };

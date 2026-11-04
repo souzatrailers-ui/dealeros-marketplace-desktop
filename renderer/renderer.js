@@ -57,7 +57,9 @@ async function renderProfiles(v) {
   v = v || await D.profiles();
   $("prof").innerHTML = v.profiles.map(p => `<option value="${esc(p.id)}"${p.id === v.active ? " selected" : ""}>${esc(p.name)}${p.user ? " · " + esc(p.user) : " (signed out)"}${p.busy ? " ⏳" : ""}</option>`).join("");
   const h = v.profiles.find(p => p.id === v.gate.holder);
-  $("prof-gate").textContent = h ? `Posting: ${h.name}` : v.gate.nextSwitchAt > Date.now() ? `Next rep can start ${new Date(v.gate.nextSwitchAt).toLocaleTimeString()}` : "";
+  const act = v.gate.activity, what = act ? ({ post: "posting", "take-down": "taking down", renew: "renewing", repost: "reposting" }[act.kind] || act.kind) : (v.gate.background ? "checking take-downs" : "posting");
+  const job = act && act.jobId != null ? ` job ${act.jobId}${act.title ? " (" + act.title + ")" : ""}` : "";
+  $("prof-gate").textContent = h ? `Browser in use: ${h.name} - ${what}${job}` : v.gate.nextSwitchAt > Date.now() ? `Next rep can start ${new Date(v.gate.nextSwitchAt).toLocaleTimeString()}` : "";
 }
 $("prof").onchange = async () => { try { await D.switchProfile($("prof").value); } catch (e) { showError("Couldn't switch profile", e); } route(); };
 $("prof-add").onclick = async () => { const n = $("prof-name").value.trim(); $("prof-name").value = ""; try { await D.addProfile(n); } catch (e) { showError("Couldn't add the profile", e); } route(); };

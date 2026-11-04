@@ -16,9 +16,9 @@ class Scheduler {
   /** Daily cap: the rep's DealerOS account value wins (server also enforces it at claim). */
   cap() { return Number(this.serverCap ?? this.s.dailyCap) || 0; }
   /** 1.0.9: one profile at a time across the computer. Returns false if another rep holds the browser. */
-  async gated(fn) {
+  async gated(fn, { background = false } = {}) {
     if (this.running) return false;                 // never start a poll/post while the previous one is still running
-    if (this.gate && !this.gate.tryAcquire(this.account.id)) return false;
+    if (this.gate && !(background ? this.gate.tryAcquireBackground(this.account.id) : this.gate.tryAcquire(this.account.id))) return false;
     this.running = true;
     try { await fn(); return true; }
     finally {
@@ -40,22 +40,41 @@ class Scheduler {
     this.delistTimer = setInterval(() => this.delistPoll().catch(e => this.fail(e)), (this.s.delistPollMin || 3) * 60000);
   }
   stop() { clearInterval(this.timer); clearInterval(this.delistTimer); this.timer = this.delistTimer = null; }
+  /** Tell the gate (and the UI) what this rep is doing with the browser. */
+  activity(kind, job) { this.gate?.setActivity?.(this.account.id, kind ? { kind, jobId: job?.id ?? null, title: job?.payload?.title || "" } : null); }
+  /** Server-side backoff hint (seconds) -> skip take-down polls until then. */
+  backoff(sec) { if (Number(sec) > 0) this.delistRetryAt = Date.now() + Number(sec) * 1000; }
   async delistPoll() {
     if (this.busy || this.running || this.paused || !this.s.removeSold) return;
-    return this.gated(() => this.drainDelists());
+    if (this.delistRetryAt && Date.now() < this.delistRetryAt) return;   // server said wait
+    // Background: only when the browser is idle and no other rep is waiting for a posting turn.
+    return this.gated(() => this.drainDelists(), { background: true });
+  }
+  /** Run one take-down / renew / repost and always report the outcome (a crash is reported as FAILED). */
+  async listingStep(job, action, settings) {
+    this.activity({ DELIST: "take-down", RENEW: "renew", REPOST: "repost" }[action] || action, job);
+    let res;
+    try { res = await this.poster.listingAction(job, action, settings); }
+    catch (e) { await this.poster.closeStray?.(); res = { outcome: "FAILED", error: `${action} crashed: ` + String(e && e.message || e).split("\n")[0].slice(0, 300) }; }
+    if (res.outcome === "AWAITING_HUMAN") return res;
+    const out = await this.api.report(job.id, strip(res));
+    if (action === "DELIST" && res.outcome !== "DELISTED") {
+      this.backoff(out && out.retry_in_seconds);
+      this.emit("error", `Take-down of job ${job.id} failed: ${res.error || res.outcome}` + (out && out.status === "REMOVE_FAILED" ? " (gave up - manager can retry in DealerOS)" : ""));
+    }
+    return res;
   }
   async drainDelists() {
     this.busy = true;
     try {
       for (let i = 0; i < 10; i++) {          // drain all pending take-downs
+        if (this.gate?.reservedFor?.(this.account.id)) break;   // a rep started waiting: hand the browser over now
         const r = await this.api.claim({ delistOnly: true });
-        if (r.action !== "DELIST") break;
-        let res;
-        try { res = await this.poster.listingAction(r.job, "DELIST", this.mergedSettings(r)); }
-        catch (e) { await this.poster.closeStray?.(); throw e; }
+        if (r.action !== "DELIST") { this.backoff(r.retry_in_seconds); break; }
+        const res = await this.listingStep(r.job, "DELIST", this.mergedSettings(r));
         if (res.outcome === "AWAITING_HUMAN") { this.emit("awaiting", r.job, "DELIST"); break; }
-        await this.api.report(r.job.id, strip(res));
         if (res.outcome === "CHECKPOINT") { this.paused = res.error; this.emit("paused", res.error); break; }
+        if (res.outcome !== "DELISTED") break;                // failed: server backs off; don't hammer Facebook
       }
     } finally { this.busy = false; this.emit("changed"); }
   }
@@ -89,6 +108,7 @@ class Scheduler {
       this.lastClaim = r;
       this.emit("claim", r.action, r.reason);
       if (r.action === "POST") {
+        this.activity("post", r.job);
         let res;
         try { res = await this.poster.post(r.job, this.mergedSettings()); }
         catch (e) { res = { outcome: "FAILED", error: "Posting crashed: " + String(e.message || e).split("\n")[0].slice(0, 300) }; await this.poster.closeStray?.(); }
@@ -98,11 +118,8 @@ class Scheduler {
         if (res.outcome === "POSTED") this.postedToday++;
         if (res.outcome === "CHECKPOINT") { this.paused = res.error; this.emit("paused", res.error); }
       } else if (["DELIST", "RENEW", "REPOST"].includes(r.action)) {
-        let res;
-        try { res = await this.poster.listingAction(r.job, r.action, this.mergedSettings()); }
-        catch (e) { this.emit("error", `${r.action} failed: ${String(e.message || e).split("\n")[0]}`); await this.poster.closeStray?.(); return; }
+        const res = await this.listingStep(r.job, r.action, this.mergedSettings());
         if (res.outcome === "AWAITING_HUMAN") { this.emit("awaiting", r.job, r.action); return; }
-        await this.api.report(r.job.id, strip(res));
         if (res.outcome === "CHECKPOINT") { this.paused = res.error; this.emit("paused", res.error); }
       }
     } catch (e) { this.fail(e); }

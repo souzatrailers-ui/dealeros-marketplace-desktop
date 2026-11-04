@@ -20,7 +20,8 @@ function sessionWithProfile(tokenSession, profile) {
 
 class DealerOSApi {
   /** session: {access_token, refresh_token}; onTokens(newPair) persists rotated tokens (encrypted). */
-  constructor({ apiBase, session, onTokens = () => {} }) {
+  constructor({ apiBase, session, onTokens = () => {}, clientInfo = null }) {
+    this.clientInfo = clientInfo;   // () => ({app_version, platform, profile}) sent with every result (1.0.19+)
     this.base = apiBase.replace(/\/$/, "") + "/api/public/marketplace-ext"; this.session = session || {}; this.onTokens = onTokens;
     this._refreshing = null;
   }
@@ -76,10 +77,13 @@ class DealerOSApi {
   assistTasks() { return this.req("/assist-tasks"); }
   assistReport(id, status, listing_url = "") { return this.req(`/assist-tasks/${id}/${status}`, { method: "POST", body: JSON.stringify({ listing_url }) }); }
   claim(o = {}) { return this.req("/jobs/claim", { method: "POST", body: JSON.stringify({ delist_only: !!o.delistOnly }) }); }
+  meta() {
+    try { const i = typeof this.clientInfo === "function" ? this.clientInfo() : this.clientInfo; return i && typeof i === "object" ? i : {}; } catch { return {}; }
+  }
   report(id, result) {
-    const map = { DELISTED: "delisted", RENEWED: "renewed", REPOSTED: "reposted" };
-    if (map[result.outcome]) return this.req(`/jobs/${id}/${map[result.outcome]}`, { method: "POST" });
-    return this.req(`/jobs/${id}/result`, { method: "POST", body: JSON.stringify(result) });
+    const map = { DELISTED: "delisted", RENEWED: "renewed", REPOSTED: "reposted" }, meta = this.meta();
+    if (map[result.outcome]) return this.req(`/jobs/${id}/${map[result.outcome]}`, { method: "POST", body: JSON.stringify(meta) });
+    return this.req(`/jobs/${id}/result`, { method: "POST", body: JSON.stringify({ ...meta, ...result }) });
   }
 }
 
